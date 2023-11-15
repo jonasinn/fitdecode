@@ -201,6 +201,7 @@ class FitReader:
         self._accumulators = {}
         self._last_timestamp = 0
         self._hr_start_timestamp = 0  # special case for the ``hr`` message
+        self._fake_body_size = False
 
         if hasattr(fileish, 'read'):
             self._fd = fileish
@@ -329,6 +330,7 @@ class FitReader:
         self._accumulators = {}
         self._last_timestamp = 0
         self._hr_start_timestamp = 0
+        self._fake_body_size = False
 
     # ONLY PRIVATE METHODS BELOW ***********************************************
 
@@ -375,15 +377,18 @@ class FitReader:
                 assert self._header is not None
                 assert self._body_bytes_left == 0
 
-                try:
-                    crc_obj = self._read_crc()
-                except FitEOFError:
-                    # if self.check_crc is not CrcCheck.RAISE:
-                    #     # There is no CRC footer in this file (or it is
-                    #     # incomplete) but caller does not mind about CRC so
-                    #     # we will just ignore this
-                    #     break
-                    raise
+                if not self._fake_body_size:
+                    try:
+                        crc_obj = self._read_crc()
+                    except FitEOFError:
+                        # if self.check_crc is not CrcCheck.RAISE:
+                        #     # There is no CRC footer in this file (or it is
+                        #     # incomplete) but caller does not mind about CRC so
+                        #     # we will just ignore this
+                        #     break
+                        raise
+                else:
+                    crc_obj = None
 
                 yield crc_obj
                 _update_state()
@@ -463,6 +468,19 @@ class FitReader:
 
         proto_ver = (proto_ver >> 4, proto_ver & ((1 << 4) - 1))
         profile_ver = (int(profile_ver / 100), int(profile_ver % 100))
+
+        # Dirty fix - to see if there is data
+        if body_size == 0:
+            # Can this happen if the device crashes mid activity..?
+            cur_pos = self._fd.tell()
+            self._fd.seek(0, io.SEEK_END)
+            size = self._fd.tell()
+            self._fd.seek(cur_pos) # Go back
+            # Write the "estimated" body size, assuming crc is missing
+            body_size = size - header_size
+            self._fake_body_size = True
+            
+            
 
         # update state
         self._header = records.FitHeader(

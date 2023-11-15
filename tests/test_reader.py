@@ -156,6 +156,16 @@ class FitReaderTestCase(unittest.TestCase):
         except fitdecode.FitEOFError:
             pass
 
+    def test_fitparse_no_body_size(self):
+        
+        fit = tuple(fitdecode.FitReader(
+            _invalid_test_file('no-body-size-but-still-there.fit'),
+            check_crc=fitdecode.CrcCheck.WARN,
+            keep_raw_chunks=True))
+
+        # Did it actually contain more than a header
+        self.assertGreater(len(fit), 1)
+
     def test_fitparse_invalid_chained_files(self):
         """Detect errors when files are chained - concatenated - together"""
         try:
